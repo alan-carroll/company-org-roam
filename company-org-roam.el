@@ -84,8 +84,16 @@ then it will delete the inserted TITLE and replace it with a complete roam link.
 
 If completing with the point inside of roam link syntax, [[roam:]], it
 will simply finish the TITLE and move the point forward out of the link
-regardless of the value of `org-roam-link-use-roam-links'."
-  (cond ((string= "roam" (org-element-property :type (org-element-context)))
+regardless of the value of `org-roam-link-use-roam-links'.
+
+If completing a roam-link link-tag, it either simply finishes and moves the point
+forward, or if completing a link-tag with a leading special char (non-alnum) it will
+first delete the insertion of a duplicate special char before moving the point."
+  (cond ((string-match-p "[^[:alnum:]]" (substring title 0 1))
+         (unless (char-equal ?: (char-before (- (point) (length title))))
+           (delete-region (- (point) (+ 1 (length title))) (- (point) (length title))))
+         (goto-char (org-element-property :end (org-element-context))))
+        ((string= "roam" (org-element-property :type (org-element-context)))
          (goto-char (org-element-property :end (org-element-context))))
         (org-roam-link-use-roam-links
          (delete-region (- (point) (length title)) (point))
@@ -145,11 +153,23 @@ Entries with no title do not appear in the completions."
 (defun company-org-roam--get-candidates (prefix)
   "Get the candidates for PREFIX.
 If completing roam-link, add existing roam-link TITLEs from current
-buffer as possible candidates."
+buffer as possible candidates.
+
+Checks if char immediatley preceding point has the property `is-link-tag'.
+If yes, completion should be for a link-tag and will use link-tag candidates.
+
+Link-tags are permitted a leading special char (non-alnum eg. @ or $) to narrow
+candidates from. If a special char is found immediately preceding PREFIX, it is
+concatenated with the original company PREFIX before filtering."
   (if (get-text-property (- (point) 1) 'is-link-tag)
-      (->> (org-roam-link--get-link-tags-completions)
-           (-union (org-roam-link--current-buffer-link-tags))
-           (company-org-roam--filter-candidates prefix))
+      (let* ((init-char (char-before (- (point) (length prefix))))
+             (special-char (unless (char-equal ?: init-char) t))
+             (special-prefix (if special-char
+                                 (concat (string init-char) prefix)
+                               prefix)))
+        (->> (org-roam-link--get-link-tags-completions)
+             (-union (org-roam-link--current-buffer-link-tags))
+             (company-org-roam--filter-candidates special-prefix)))
     (let ((roam-candidates
            (if (or org-roam-link-use-roam-links
                    (string= "roam" (org-element-property :type (org-element-context))))
