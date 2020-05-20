@@ -146,15 +146,19 @@ Entries with no title do not appear in the completions."
   "Get the candidates for PREFIX.
 If completing roam-link, add existing roam-link TITLEs from current
 buffer as possible candidates."
-  (let ((roam-candidates
-         (if (or org-roam-link-use-roam-links
-                 (string= "roam" (org-element-property :type (org-element-context))))
-             (org-roam-link--current-buffer-roam-link-titles)
-           nil)))
-    (->> (company-org-roam--cache-get-titles)
-         (-flatten)
-         (-union roam-candidates)
-         (company-org-roam--filter-candidates prefix))))
+  (if (get-text-property (- (point) 1) 'is-link-tag)
+      (->> (org-roam-link--get-link-tags-completions)
+           (-union (org-roam-link--current-buffer-link-tags))
+           (company-org-roam--filter-candidates prefix))
+    (let ((roam-candidates
+           (if (or org-roam-link-use-roam-links
+                   (string= "roam" (org-element-property :type (org-element-context))))
+               (org-roam-link--current-buffer-roam-link-titles)
+             nil)))
+      (->> (company-org-roam--cache-get-titles)
+           (-flatten)
+           (-union roam-candidates)
+           (company-org-roam--filter-candidates prefix)))))
 
 ;;;###autoload
 (defun company-org-roam (command &optional arg &rest _)
